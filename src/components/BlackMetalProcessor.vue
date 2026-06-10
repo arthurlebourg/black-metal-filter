@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import { applyBlackMetalStyle } from '../imageProcessing'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -26,9 +26,11 @@ const handleImageUpload = (event: Event) => {
 
   reader.onload = (e) => {
     const img = new Image()
-    img.onload = () => {
+    img.onload = async () => { // <-- Ajoute 'async' ici
       originalImage.value = img
-      processImage(false) // On génère la preview basse résolution par défaut
+      imageUploaded.value = true // On active l'affichage du v-if d'abord
+      await nextTick()           // On attend que Vue insère le <canvas> dans le DOM
+      processImage(false)        // On dessine l'image
     }
     img.src = e.target?.result as string
   }
@@ -60,7 +62,6 @@ const processImage = (bakeMode : boolean) => {
   
   ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
   
-  imageUploaded.value = true
   isBaked.value = bakeMode
 
   applyBlackMetalStyle(canvas, {
@@ -91,67 +92,70 @@ const bakeImage = () => {
     
     <input type="file" accept="image/*" @change="handleImageUpload" />
     
-    <div v-if="imageUploaded" class="controls-panel">
-      <div class="slider-group">
-        <label for="noise">Intensité de la crasse ({{ grainNoiseIntensity }})</label>
-        <input 
-          id="noise" 
-          type="range" 
-          min="0" 
-          max="300" 
-          v-model.number="grainNoiseIntensity" 
-        />
+    <div v-if="imageUploaded" class="workspace">
+      
+      <div class="canvas-wrapper">
+        <canvas ref="canvasRef"></canvas>
       </div>
 
-      <div class="slider-group">
-        <label for="threshold">Seuil de Contraste ({{ contrastThreshold }})</label>
-        <input 
-          id="threshold" 
-          type="range" 
-          min="0" 
-          max="255" 
-          v-model.number="contrastThreshold" 
-        />
-      </div>
+      <div class="controls-panel">
+        <div class="slider-group">
+          <label for="noise">Intensité de la crasse ({{ grainNoiseIntensity }})</label>
+          <input 
+            id="noise" 
+            type="range" 
+            min="0" 
+            max="300" 
+            v-model.number="grainNoiseIntensity" 
+          />
+        </div>
 
-      <div class="slider-group">
-        <label for="threshold">vignette Intensity({{ vignetteIntensity }})</label>
-        <input 
-          id="threshold" 
-          type="range" 
-          min="0" 
-          max="1" 
-          step="0.1"
-          v-model.number="vignetteIntensity" 
-        />
-      </div>
+        <div class="slider-group">
+          <label for="threshold">Seuil de Contraste ({{ contrastThreshold }})</label>
+          <input 
+            id="threshold" 
+            type="range" 
+            min="0" 
+            max="255" 
+            v-model.number="contrastThreshold" 
+          />
+        </div>
 
-      <div class="slider-group">
-        <label for="threshold">Blur Radius ({{ blurRadius }})</label>
-        <input 
-          id="threshold" 
-          type="range" 
-          min="0" 
-          max="10" 
-          v-model.number="blurRadius" 
-        />
-      </div>
+        <div class="slider-group">
+          <label for="vignette">Vignette Intensity ({{ vignetteIntensity }})</label>
+          <input 
+            id="vignette" 
+            type="range" 
+            min="0" 
+            max="1" 
+            step="0.1"
+            v-model.number="vignetteIntensity" 
+          />
+        </div>
 
-      <div class="actions">
-        <button class="bake-btn" @click="bakeImage" :disabled="isBaked">
-          {{ isBaked ? 'Rendu HD Terminé !' : '🔥 BAKE RESOLUTION FINALE 🔥' }}
-        </button>
-        <p v-if="isBaked" class="help-text">Clic-droit sur l'image pour la sauvegarder.</p>
-        <p v-else class="help-text">Mode prévisualisation fluide activé.</p>
-      </div>
-    </div>
+        <div class="slider-group">
+          <label for="blur">Blur Radius ({{ blurRadius }})</label>
+          <input 
+            id="blur" 
+            type="range" 
+            min="0" 
+            max="10" 
+            v-model.number="blurRadius" 
+          />
+        </div>
 
-    <div class="canvas-wrapper">
-      <canvas ref="canvasRef"></canvas>
+        <div class="actions">
+          <button class="bake-btn" @click="bakeImage" :disabled="isBaked">
+            {{ isBaked ? 'Rendu HD Terminé !' : '🔥 BAKE RESOLUTION FINALE 🔥' }}
+          </button>
+          <p v-if="isBaked" class="help-text">Clic-droit sur l'image pour la sauvegarder.</p>
+          <p v-else class="help-text">Mode prévisualisation fluide activé.</p>
+        </div>
+      </div>
+      
     </div>
   </div>
 </template>
-
 <style scoped>
 .processor-container {
   display: flex;
@@ -163,7 +167,32 @@ const bakeImage = () => {
   color: #fff;
 }
 
+/* Nouveau conteneur Flexbox */
+.workspace {
+  display: flex;
+  flex-direction: row; /* Aligne les enfants horizontalement */
+  align-items: flex-start; /* Aligne en haut */
+  justify-content: center;
+  gap: 2rem;
+  width: 100%;
+  max-width: 1200px;
+  margin-top: 1rem;
+}
+
+.canvas-wrapper {
+  flex: 1 1 auto; /* Prend l'espace disponible */
+  display: flex;
+  justify-content: center;
+}
+
+canvas {
+  max-width: 100%;
+  border: 2px solid #333;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+}
+
 .controls-panel {
+  flex: 0 0 350px; /* Largeur fixe pour le panneau de contrôle */
   background-color: #222;
   padding: 1.5rem;
   border: 1px solid #444;
@@ -171,8 +200,7 @@ const bakeImage = () => {
   display: flex;
   flex-direction: column;
   gap: 1.2rem;
-  width: 100%;
-  max-width: 400px;
+  box-sizing: border-box;
 }
 
 .slider-group {
@@ -230,10 +258,17 @@ input[type="range"] {
   font-style: italic;
 }
 
-canvas {
-  max-width: 100%;
-  border: 2px solid #333;
-  margin-top: 1rem;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+/* Responsive : repasse en colonne sur petits écrans */
+@media (max-width: 800px) {
+  .workspace {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .controls-panel {
+    flex: auto;
+    width: 100%;
+    max-width: 400px;
+  }
 }
 </style>
